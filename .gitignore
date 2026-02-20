@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# Archivos locales de trabajo
+.claude/
+public/
+codigo_completo_proyecto.md
+codigo_completo_proyecto_part2.md
+codigo_original.md
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
