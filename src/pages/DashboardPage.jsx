@@ -1,16 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Bell, Settings as SettingsIcon, LogOut, Video, Battery, Plus,
     Radar, Search, BrainCircuit, Zap, RefreshCw, CheckCircle2, AlertTriangle,
-    Activity, AlertCircle, Sun, Moon, Laptop, Home, ImageIcon, Camera, Smartphone, Monitor
+    Activity, AlertCircle, Sun, Moon, Laptop, Home, ImageIcon, Camera, Smartphone, Monitor,
+    Wifi, QrCode, StopCircle
 } from 'lucide-react';
 
 import AnimatedBackground from '../components/layout/AnimatedBackground';
 import OmniLogo from '../components/ui/OmniLogo';
 import Button from '../components/ui/Button';
 import VideoCard from '../components/surveillance/VideoCard';
+import WebRTCCard from '../components/surveillance/WebRTCCard';
 import { useTheme } from '../context/ThemeContext';
 import { useNetworkScan } from '../hooks/useNetworkScan';
+import { useWebRTCViewer, useCameraShare } from '../hooks/useWebRTC';
 
 const DashboardPage = ({ user, onLogout }) => {
     const { theme, setTheme } = useTheme();
@@ -33,6 +36,17 @@ const DashboardPage = ({ user, onLogout }) => {
     const [groqStatus, setGroqStatus] = useState('idle');
 
     const { isScanning, scanProgress, startScan } = useNetworkScan();
+    const { cameras: webrtcCameras } = useWebRTCViewer();
+    const { isSharing, startSharing, stopSharing, error: webrtcError } = useCameraShare();
+    const [localIp, setLocalIp] = useState('');
+    const [showShareModal, setShowShareModal] = useState(false);
+    const [shareName, setShareName] = useState('Mi Telefono');
+
+    const appProtocol = window.location.protocol; // 'https:' cuando SSL esta activo
+
+    useEffect(() => {
+        fetch('/api/status').then(r => r.json()).then(d => setLocalIp(d.myIp || '')).catch(() => {});
+    }, []);
 
     const showToast = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(''), 3000); };
 
@@ -137,7 +151,70 @@ const DashboardPage = ({ user, onLogout }) => {
                             </div>
                         </div>
 
+                        {/* ── Panel Conectar Telefono ── */}
+                        <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-3xl border border-emerald-200 dark:border-emerald-500/30 shadow-lg p-5 flex flex-col sm:flex-row items-center gap-5 transition-colors">
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <Wifi size={18} className="text-emerald-500" />
+                                    <h3 className="font-extrabold text-slate-800 dark:text-white text-base">Conectar desde otro dispositivo</h3>
+                                </div>
+                                <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">
+                                    Escanea el QR con el tablet/teléfono (misma red WiFi) — abre directo en <strong className="text-emerald-600 dark:text-emerald-400">Modo Cámara</strong>:
+                                </p>
+                                {localIp ? (
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <code className="bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 px-3 py-1.5 rounded-xl text-sm font-mono font-bold border border-slate-200 dark:border-slate-700 select-all">
+                                            {appProtocol}//{localIp}:5173/#camera
+                                        </code>
+                                        <button onClick={() => navigator.clipboard?.writeText(`${appProtocol}//${localIp}:5173/#camera`)}
+                                            className="text-xs text-slate-500 hover:text-emerald-500 transition-colors font-medium">
+                                            Copiar
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <span className="text-xs text-slate-400 font-mono">Iniciando servidor...</span>
+                                )}
+                            </div>
+                            {/* QR Code */}
+                            {localIp && (
+                                <div className="shrink-0">
+                                    <img
+                                        src={`https://api.qrserver.com/v1/create-qr-code/?data=${appProtocol}//${localIp}:5173/%23camera&size=110x110&bgcolor=ffffff&color=0f172a&margin=4`}
+                                        alt="QR Code"
+                                        className="w-28 h-28 rounded-xl border-2 border-slate-200 dark:border-slate-700 shadow-md"
+                                    />
+                                    <p className="text-[10px] text-center text-slate-400 mt-1 font-mono">Modo Cámara</p>
+                                </div>
+                            )}
+                            {/* Boton compartir camara (desde este dispositivo) */}
+                            <div className="shrink-0 flex flex-col items-center gap-2">
+                                {!isSharing ? (
+                                    <button onClick={() => setShowShareModal(true)}
+                                        className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2.5 rounded-2xl text-sm font-bold shadow-[0_5px_20px_rgba(16,185,129,0.4)] transition-all active:scale-95">
+                                        <Camera size={16} /> Compartir mi cámara
+                                    </button>
+                                ) : (
+                                    <button onClick={stopSharing}
+                                        className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white px-4 py-2.5 rounded-2xl text-sm font-bold shadow-[0_5px_20px_rgba(239,68,68,0.4)] animate-pulse transition-all active:scale-95">
+                                        <StopCircle size={16} /> Detener transmisión
+                                    </button>
+                                )}
+                                {webrtcError && <p className="text-[11px] text-red-500 text-center max-w-[140px]">{webrtcError}</p>}
+                                {webrtcCameras.length > 0 && (
+                                    <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                                        {webrtcCameras.length} cámara(s) conectada(s)
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* ── Grid de camaras ── */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {/* Camaras WebRTC (en vivo desde telefonos) */}
+                            {webrtcCameras.map((cam) => (
+                                <WebRTCCard key={cam.id} camera={cam} onRemove={() => {}} />
+                            ))}
+                            {/* Camaras IP normales */}
                             {devices.map((device) => (
                                 <VideoCard key={device.id} device={device} useRealVideo={useRealVideo} onSnapshot={handleSnapshotEvent} onRemove={(id) => setDevices(devices.filter(d => d.id !== id))} onEditName={handleEditDeviceName} />
                             ))}
@@ -285,6 +362,39 @@ const DashboardPage = ({ user, onLogout }) => {
                 )}
 
             </main>
+
+            {/* MODAL COMPARTIR CAMARA */}
+            {showShareModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm" onClick={() => setShowShareModal(false)}></div>
+                    <div className="relative z-10 bg-white dark:bg-slate-900 rounded-3xl p-8 w-full max-w-sm border border-slate-200 dark:border-slate-800 shadow-2xl animate-in zoom-in-95 duration-200">
+                        <h2 className="text-xl font-extrabold text-slate-800 dark:text-white mb-2 flex items-center gap-2">
+                            <Camera className="text-emerald-500" size={22} /> Compartir cámara
+                        </h2>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                            Tu cámara se transmitirá en vivo al dashboard principal via WebRTC.
+                        </p>
+                        <label className="block text-sm font-bold text-slate-600 dark:text-slate-400 mb-2">Nombre del dispositivo</label>
+                        <input
+                            type="text"
+                            value={shareName}
+                            onChange={(e) => setShareName(e.target.value)}
+                            className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 font-medium mb-6 transition-all"
+                            placeholder="Mi Telefono"
+                        />
+                        <div className="flex gap-3">
+                            <button onClick={() => setShowShareModal(false)}
+                                className="flex-1 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                                Cancelar
+                            </button>
+                            <button onClick={() => { startSharing(shareName || 'Mi Telefono'); setShowShareModal(false); }}
+                                className="flex-1 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold shadow-[0_5px_20px_rgba(16,185,129,0.4)] transition-all active:scale-95">
+                                Iniciar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* MODAL AÑADIR DISPOSITIVO */}
             {showAddModal && (
