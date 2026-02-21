@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, Wifi, AlertTriangle } from 'lucide-react';
 
-const NIGHT_THRESHOLD  = 60;   // luminancia promedio < 60/255 → modo nocturno
+const NIGHT_THRESHOLD  = 80;   // luminancia promedio < 80/255 → modo nocturno
 const MOTION_THRESHOLD = 0.015; // 1.5% de píxeles cambian → movimiento
 const PIXEL_DIFF_SENS  = 20;   // diferencia mínima por canal para contar un píxel
 
@@ -77,8 +77,8 @@ const WebRTCCard = ({ camera, onRemove }) => {
         };
     }, [camera.stream]);
 
-    // Filtro CSS aplicado al video en modo nocturno (visión nocturna verde)
-    const nightFilter = 'brightness(2) contrast(1.3) saturate(0.2) sepia(0.7) hue-rotate(82deg)';
+    // Filtro modo nocturno: aumenta brillo/contraste + tinte verde suave tipo NVG
+    const nightFilter = 'brightness(3.5) contrast(1.4) saturate(0.1) sepia(1) hue-rotate(80deg)';
 
     return (
         <div className={`bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm rounded-2xl overflow-hidden border-2 transition-all duration-500 flex flex-col relative

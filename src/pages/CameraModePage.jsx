@@ -80,7 +80,7 @@ const CameraModePage = () => {
             let lum = 0;
             for (let i = 0; i < data.length; i += 4)
                 lum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-            setIsNightMode((lum / (data.length / 4)) < 60);
+            setIsNightMode((lum / (data.length / 4)) < 80);
         };
 
         nightIntervalRef.current = setInterval(checkBrightness, 2000);
@@ -177,7 +177,7 @@ const CameraModePage = () => {
                                 style={{
                                     transform: facingMode === 'user' ? 'scaleX(-1)' : 'none',
                                     filter: isNightMode
-                                        ? 'brightness(2) contrast(1.3) saturate(0.2) sepia(0.7) hue-rotate(82deg)'
+                                        ? 'brightness(3.5) contrast(1.4) saturate(0.1) sepia(1) hue-rotate(80deg)'
                                         : 'none',
                                 }}
                             />
