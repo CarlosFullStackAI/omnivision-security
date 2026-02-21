@@ -19,6 +19,11 @@ const CameraModePage = () => {
     const [facingMode, setFacingMode] = useState('environment');
     const [previewStream, setPreviewStream] = useState(null);
     const [previewError, setPreviewError] = useState(null);
+
+    // Detectar Safari en iOS
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    const isHttps = window.location.protocol === 'https:';
     const previewRef     = useRef(null);
     // Evita que el cleanup detenga los tracks cuando se transfieren al hook
     const transferredRef = useRef(false);
@@ -36,7 +41,13 @@ const CameraModePage = () => {
                 setPreviewStream(s);
                 setPreviewError(null);
             } catch {
-                setPreviewError('No se pudo acceder a la cámara. Verifica los permisos en Chrome flags.');
+                if (isIOS && isSafari && !isHttps) {
+                    setPreviewError('Safari en iPhone requiere HTTPS para acceder a la cámara. Usa Chrome con el flag de HTTP inseguro, o configura HTTPS.');
+                } else if (isIOS && !isHttps) {
+                    setPreviewError('iOS requiere HTTPS para acceder a la cámara. Activa el flag en chrome://flags/#unsafely-treat-insecure-origin-as-secure');
+                } else {
+                    setPreviewError('No se pudo acceder a la cámara. Verifica los permisos.');
+                }
             }
         };
         if (!isSharing) getPreview();
@@ -125,6 +136,7 @@ const CameraModePage = () => {
                             <video
                                 ref={previewRef}
                                 autoPlay playsInline muted
+                                webkit-playsinline="true"
                                 className="w-full h-full object-cover"
                                 style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
                             />

@@ -61,6 +61,13 @@
   animation: blob 15s infinite alternate ease-in-out;
 }
 
+/* Safari-safe blur: sin mix-blend-mode que causa pantalla negra en iOS Safari */
+.blob-blur {
+  -webkit-filter: blur(80px);
+  filter: blur(80px);
+  will-change: transform;
+}
+
 .animation-delay-2000 {
   animation-delay: 2s;
 }

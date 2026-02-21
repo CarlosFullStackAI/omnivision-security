@@ -43,6 +43,7 @@ const WebRTCCard = ({ camera, onRemove }) => {
                     autoPlay
                     playsInline
                     muted
+                    webkit-playsinline="true"
                     className="w-full h-full object-cover"
                 />
                 {!camera.stream && (
