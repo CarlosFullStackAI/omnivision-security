@@ -16,14 +16,16 @@ const CameraModePage = () => {
         return 'Mi Dispositivo';
     });
 
-    const [facingMode, setFacingMode] = useState('environment');
+    const [facingMode,    setFacingMode]    = useState('environment');
     const [previewStream, setPreviewStream] = useState(null);
-    const [previewError, setPreviewError] = useState(null);
+    const [previewError,  setPreviewError]  = useState(null);
+    const [isNightMode,   setIsNightMode]   = useState(false);
 
     // Detectar iOS (todos los navegadores usan WebKit = misma restriccion HTTPS)
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isIOS   = /iPad|iPhone|iPod/.test(navigator.userAgent);
     const isHttps = window.location.protocol === 'https:';
     const previewRef     = useRef(null);
+    const nightIntervalRef = useRef(null);
     // Evita que el cleanup detenga los tracks cuando se transfieren al hook
     const transferredRef = useRef(false);
 
@@ -57,6 +59,30 @@ const CameraModePage = () => {
         if (!video) return;
         const stream = isSharing ? localStream : previewStream;
         if (stream) video.srcObject = stream;
+    }, [previewStream, localStream, isSharing]);
+
+    // Detección de brillo para modo nocturno en el preview
+    useEffect(() => {
+        const activeStream = isSharing ? localStream : previewStream;
+        if (!activeStream) { setIsNightMode(false); return; }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 80; canvas.height = 45;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+        const checkBrightness = () => {
+            const video = previewRef.current;
+            if (!video || video.readyState < 2) return;
+            ctx.drawImage(video, 0, 0, 80, 45);
+            const { data } = ctx.getImageData(0, 0, 80, 45);
+            let lum = 0;
+            for (let i = 0; i < data.length; i += 4)
+                lum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+            setIsNightMode((lum / (data.length / 4)) < 60);
+        };
+
+        nightIntervalRef.current = setInterval(checkBrightness, 2000);
+        return () => clearInterval(nightIntervalRef.current);
     }, [previewStream, localStream, isSharing]);
 
     // Limpiar preview stream — respeta la transferencia al hook
@@ -134,8 +160,13 @@ const CameraModePage = () => {
                                 ref={previewRef}
                                 autoPlay playsInline muted
                                 webkit-playsinline="true"
-                                className="w-full h-full object-cover"
-                                style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
+                                className="w-full h-full object-cover transition-all duration-700"
+                                style={{
+                                    transform: facingMode === 'user' ? 'scaleX(-1)' : 'none',
+                                    filter: isNightMode
+                                        ? 'brightness(2) contrast(1.3) saturate(0.2) sepia(0.7) hue-rotate(82deg)'
+                                        : 'none',
+                                }}
                             />
                         ) : (
                             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-slate-500">
@@ -154,7 +185,7 @@ const CameraModePage = () => {
                         )}
 
                         {/* Badges */}
-                        <div className="absolute top-3 left-3 flex gap-2">
+                        <div className="absolute top-3 left-3 flex gap-2 flex-wrap">
                             {isSharing && (
                                 <div className="flex items-center gap-1.5 bg-black/70 backdrop-blur-md px-3 py-1 rounded-full border border-red-500/50">
                                     <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse shadow-[0_0_6px_rgba(239,68,68,1)]"></span>
@@ -165,6 +196,11 @@ const CameraModePage = () => {
                                 <div className="flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full">
                                     <span className="w-2 h-2 bg-slate-400 rounded-full"></span>
                                     <span className="text-slate-300 text-[11px] font-mono">PREVIEW</span>
+                                </div>
+                            )}
+                            {isNightMode && (
+                                <div className="flex items-center gap-1.5 bg-indigo-700/80 backdrop-blur-md px-3 py-1 rounded-full border border-indigo-400/40">
+                                    <span className="text-indigo-100 text-[11px] font-mono font-bold">🌙 Nocturno</span>
                                 </div>
                             )}
                         </div>
