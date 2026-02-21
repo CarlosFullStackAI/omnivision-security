@@ -9,7 +9,13 @@ const isCameraMode = () =>
   new URLSearchParams(window.location.search).has('camera');
 
 function App() {
-  const [auth, setAuth] = useState(null); // { user, token }
+  const [auth, setAuth] = useState(() => {
+    // Recuperar sesion guardada al recargar la pagina
+    try {
+      const saved = sessionStorage.getItem('omni_auth');
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
   const [cameraMode] = useState(isCameraMode);
 
   useEffect(() => {
@@ -28,8 +34,15 @@ function App() {
   return (
     <>
       {!auth
-        ? <AuthPage onLogin={(userData) => setAuth({ user: userData, token: userData.token })} />
-        : <DashboardPage user={auth.user} token={auth.token} onLogout={() => setAuth(null)} />
+        ? <AuthPage onLogin={(userData) => {
+              const newAuth = { user: userData, token: userData.token };
+              sessionStorage.setItem('omni_auth', JSON.stringify(newAuth));
+              setAuth(newAuth);
+            }} />
+        : <DashboardPage user={auth.user} token={auth.token} onLogout={() => {
+              sessionStorage.removeItem('omni_auth');
+              setAuth(null);
+            }} />
       }
     </>
   );
