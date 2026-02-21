@@ -2,7 +2,24 @@ import express from 'express';
 import { exec, spawn } from 'child_process';
 import os from 'os';
 import http from 'http';
+import crypto from 'crypto';
 import { WebSocketServer } from 'ws';
+
+// ─── Sesiones ──────────────────────────────────────────────────────────────
+const sessions = new Map(); // token → expiresAt (ms)
+const SESSION_MS = 24 * 60 * 60 * 1000; // 24 horas
+
+function requireAuth(req, res, next) {
+    const header = req.headers.authorization || '';
+    if (!header.startsWith('Bearer ')) return res.status(401).json({ error: 'No autorizado' });
+    const token = header.slice(7);
+    const expires = sessions.get(token);
+    if (!expires || expires < Date.now()) {
+        sessions.delete(token);
+        return res.status(401).json({ error: 'Sesión inválida o expirada' });
+    }
+    next();
+}
 
 // ─── Cloudflare Quick Tunnel ───────────────────────────────────────────────
 let tunnelUrl = null;
@@ -32,7 +49,20 @@ function startCloudflaredTunnel() {
 }
 
 const app = express();
+app.use(express.json());
 const PORT = 3001;
+
+// ─── Login ──────────────────────────────────────────────────────────────────
+app.post('/api/login', (req, res) => {
+    const { email, password } = req.body || {};
+    if (email === 'carlos45335@gmail.com' && password === 'test123456') {
+        const token = crypto.randomBytes(32).toString('hex');
+        sessions.set(token, Date.now() + SESSION_MS);
+        res.json({ token });
+    } else {
+        res.status(401).json({ error: 'Correo o contraseña incorrectos' });
+    }
+});
 
 function getLocalNetwork() {
     const interfaces = os.networkInterfaces();
@@ -108,7 +138,7 @@ function guessDeviceType(mac) {
 
 // ─── HTTP Routes ───────────────────────────────────────────────────────────
 
-app.get('/api/scan', async (req, res) => {
+app.get('/api/scan', requireAuth, async (req, res) => {
     try {
         const { subnet, myIp } = getLocalNetwork();
         let arpDevices = await readArpTable();
@@ -130,12 +160,12 @@ app.get('/api/scan', async (req, res) => {
     }
 });
 
-app.get('/api/status', (req, res) => {
+app.get('/api/status', requireAuth, (req, res) => {
     const { subnet, myIp } = getLocalNetwork();
     res.json({ ok: true, myIp, subnet, tunnelUrl });
 });
 
-app.get('/api/stream', (req, res) => {
+app.get('/api/stream', requireAuth, (req, res) => {
     const { ip, port } = req.query;
     if (!ip || !port) return res.status(400).end();
     const camReq = http.get({ host: ip, port: parseInt(port), path: '/video', timeout: 8000 }, (camRes) => {
@@ -159,7 +189,7 @@ const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 
 wss.on('connection', (ws) => {
     const id = String(++idCounter);
-    const client = { ws, role: null, name: null, id };
+    const client = { ws, role: null, name: null, id, authed: false };
     clients.set(id, client);
 
     ws.send(JSON.stringify({ type: 'welcome', id }));
@@ -167,6 +197,21 @@ wss.on('connection', (ws) => {
     ws.on('message', (rawData) => {
         try {
             const msg = JSON.parse(rawData.toString());
+
+            // ── Autenticación requerida antes de cualquier otra operación ──
+            if (!client.authed) {
+                if (msg.type === 'auth') {
+                    const expires = sessions.get(msg.token);
+                    if (expires && expires > Date.now()) {
+                        client.authed = true;
+                        ws.send(JSON.stringify({ type: 'auth-ok' }));
+                    } else {
+                        ws.send(JSON.stringify({ type: 'auth-error', message: 'Token inválido' }));
+                        ws.close();
+                    }
+                }
+                return; // ignorar todo antes de autenticar
+            }
 
             if (msg.type === 'register-camera') {
                 client.role = 'camera';

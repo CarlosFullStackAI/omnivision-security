@@ -15,7 +15,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useNetworkScan } from '../hooks/useNetworkScan';
 import { useWebRTCViewer, useCameraShare } from '../hooks/useWebRTC';
 
-const DashboardPage = ({ user, onLogout }) => {
+const DashboardPage = ({ user, token, onLogout }) => {
     const { theme, setTheme } = useTheme();
     const [activeTab, setActiveTab] = useState('home');
     const [devices, setDevices] = useState([
@@ -36,8 +36,8 @@ const DashboardPage = ({ user, onLogout }) => {
     const [groqStatus, setGroqStatus] = useState('idle');
 
     const { isScanning, scanProgress, startScan } = useNetworkScan();
-    const { cameras: webrtcCameras } = useWebRTCViewer();
-    const { isSharing, startSharing, stopSharing, error: webrtcError } = useCameraShare();
+    const { cameras: webrtcCameras } = useWebRTCViewer(token);
+    const { isSharing, startSharing, stopSharing, error: webrtcError } = useCameraShare(token);
     const [localIp, setLocalIp] = useState('');
     const [tunnelUrl, setTunnelUrl] = useState('');
     const [showShareModal, setShowShareModal] = useState(false);
@@ -45,14 +45,21 @@ const DashboardPage = ({ user, onLogout }) => {
 
     const appProtocol = window.location.protocol;
 
-    // URL que se muestra en el QR: tunnel HTTPS si ya está listo, sino IP local
-    const cameraUrl = tunnelUrl
-        ? `${tunnelUrl}/#camera`
-        : localIp ? `${appProtocol}//${localIp}:5173/#camera` : '';
+    const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
+
+    // URL del QR incluye el token para que CameraModePage quede autenticada
+    const cameraUrl = (() => {
+        if (!token) return '';
+        const params = `?token=${token}`;
+        if (tunnelUrl) return `${tunnelUrl}/${params}#camera`;
+        if (localIp)   return `${appProtocol}//${localIp}:5173/${params}#camera`;
+        return '';
+    })();
 
     useEffect(() => {
+        if (!token) return;
         const fetchStatus = () => {
-            fetch('/api/status')
+            fetch('/api/status', { headers: authHeader })
                 .then(r => r.json())
                 .then(d => {
                     if (d.myIp) setLocalIp(d.myIp);
@@ -72,7 +79,7 @@ const DashboardPage = ({ user, onLogout }) => {
     const showToast = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(''), 3000); };
 
     const startNetworkScan = async () => {
-        const found = await startScan('192.168.1');
+        const found = await startScan(token);
         found.forEach(newDev => {
             if (!devices.find(d => d.ip === newDev.ip)) { setDevices(prev => [...prev, newDev]); showToast('Nuevos dispositivos'); }
         });

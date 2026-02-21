@@ -9,7 +9,7 @@ const isCameraMode = () =>
   new URLSearchParams(window.location.search).has('camera');
 
 function App() {
-  const [user, setUser] = useState(null);
+  const [auth, setAuth] = useState(null); // { user, token }
   const [cameraMode] = useState(isCameraMode);
 
   useEffect(() => {
@@ -22,13 +22,14 @@ function App() {
     meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0';
   }, []);
 
+  // CameraModePage lee su propio token desde la URL
   if (cameraMode) return <CameraModePage />;
 
   return (
     <>
-      {!user
-        ? <AuthPage onLogin={setUser} />
-        : <DashboardPage user={user} onLogout={() => setUser(null)} />
+      {!auth
+        ? <AuthPage onLogin={(userData) => setAuth({ user: userData, token: userData.token })} />
+        : <DashboardPage user={auth.user} token={auth.token} onLogout={() => setAuth(null)} />
       }
     </>
   );

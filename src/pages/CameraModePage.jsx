@@ -5,7 +5,9 @@ import OmniLogo from '../components/ui/OmniLogo';
 import AnimatedBackground from '../components/layout/AnimatedBackground';
 
 const CameraModePage = () => {
-    const { isSharing, startSharing, stopSharing, error, localStream } = useCameraShare();
+    // Token incluido en la URL por el QR del dashboard: ?token=XXX#camera
+    const urlToken = new URLSearchParams(window.location.search).get('token');
+    const { isSharing, startSharing, stopSharing, error, localStream } = useCameraShare(urlToken);
 
     const [deviceName, setDeviceName] = useState(() => {
         const ua = navigator.userAgent;
@@ -119,6 +121,17 @@ const CameraModePage = () => {
     };
 
     const hasVideo = isSharing ? !!localStream : !!previewStream;
+
+    // Acceso denegado sin token
+    if (!urlToken) return (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-white gap-4 p-8 text-center">
+            <span className="text-5xl">🔒</span>
+            <h2 className="text-xl font-bold">Acceso denegado</h2>
+            <p className="text-slate-400 text-sm max-w-xs">
+                Escanea el código QR desde el dashboard de OmniVision para acceder a esta página.
+            </p>
+        </div>
+    );
 
     return (
         <div className="min-h-screen flex flex-col relative overflow-hidden">

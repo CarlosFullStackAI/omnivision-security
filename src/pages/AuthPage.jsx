@@ -12,27 +12,41 @@ const AuthPage = ({ onLogin }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [message, setMessage] = useState('');
 
-    const handleAuth = (e) => {
+    const handleAuth = async (e) => {
         e.preventDefault();
         setIsLoading(true);
         setMessage('');
 
-        setTimeout(() => {
+        if (view === 'forgot') {
+            setMessage('Enlace enviado a tu correo.');
             setIsLoading(false);
-            if (view === 'forgot') {
-                setMessage('Enlace enviado a tu correo.');
-                setTimeout(() => { setMessage(''); setView('login'); }, 3000);
-            } else if (view === 'login') {
-                if (email === 'carlos45335@gmail.com' && password === 'test123456') {
-                    onLogin({ email, name: 'Carlos' });
-                } else {
-                    setMessage('Correo o contraseña incorrectos.');
-                }
+            setTimeout(() => { setMessage(''); setView('login'); }, 3000);
+            return;
+        }
+        if (view === 'register') {
+            setMessage('Registro en desarrollo.');
+            setIsLoading(false);
+            setTimeout(() => setMessage(''), 3000);
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                onLogin({ email, name: 'Carlos', token: data.token });
             } else {
-                setMessage('Registro en desarrollo.');
-                setTimeout(() => { setMessage(''); }, 3000);
+                setMessage(data.error || 'Correo o contraseña incorrectos.');
             }
-        }, 1000);
+        } catch {
+            setMessage('No se pudo conectar al servidor.');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (

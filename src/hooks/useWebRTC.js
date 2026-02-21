@@ -6,9 +6,9 @@ const wsUrl = () =>
     `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws`;
 
 // ─── VIEWER (Dashboard en PC) ─────────────────────────────────────────────
-export const useWebRTCViewer = () => {
+export const useWebRTCViewer = (token) => {
     const [cameras, setCameras] = useState([]);
-    const wsRef   = useRef(null);
+    const wsRef    = useRef(null);
     const peersRef = useRef({});
 
     const connectToCamera = useCallback((cameraId, cameraName) => {
@@ -37,14 +37,24 @@ export const useWebRTCViewer = () => {
     }, []);
 
     useEffect(() => {
+        if (!token) return; // no conectar sin token
+
         const ws = new WebSocket(wsUrl());
         wsRef.current = ws;
 
-        ws.onopen = () => ws.send(JSON.stringify({ type: 'register-viewer' }));
+        ws.onopen = () => ws.send(JSON.stringify({ type: 'auth', token }));
 
         ws.onmessage = async (e) => {
             const msg = JSON.parse(e.data);
 
+            if (msg.type === 'auth-ok') {
+                ws.send(JSON.stringify({ type: 'register-viewer' }));
+                return;
+            }
+            if (msg.type === 'auth-error') {
+                console.warn('[WebRTC] Token inválido, cerrando conexión viewer');
+                return;
+            }
             if (msg.type === 'cameras-list') {
                 msg.cameras.forEach(cam => connectToCamera(cam.id, cam.name));
             }
@@ -74,13 +84,13 @@ export const useWebRTCViewer = () => {
             Object.values(peersRef.current).forEach(pc => pc.close());
             ws.close();
         };
-    }, [connectToCamera]);
+    }, [connectToCamera, token]);
 
     return { cameras };
 };
 
 // ─── BROADCASTER (Telefono / dispositivo con camara) ──────────────────────
-export const useCameraShare = () => {
+export const useCameraShare = (token) => {
     const [isSharing, setIsSharing]     = useState(false);
     const [error, setError]             = useState(null);
     const [localStream, setLocalStream] = useState(null);
@@ -88,8 +98,8 @@ export const useCameraShare = () => {
     const streamRef = useRef(null);
     const peersRef  = useRef({});
 
-    // existingStream: si ya tienes el stream (para preview), pasalo aqui
     const startSharing = useCallback(async (name, existingStream = null) => {
+        if (!token) { setError('Sin token de acceso. Escanea el QR desde el dashboard.'); return; }
         try {
             setError(null);
             const stream = existingStream || await navigator.mediaDevices.getUserMedia({
@@ -102,11 +112,23 @@ export const useCameraShare = () => {
             const ws = new WebSocket(wsUrl());
             wsRef.current = ws;
 
-            ws.onopen = () => ws.send(JSON.stringify({ type: 'register-camera', name }));
+            ws.onopen = () => ws.send(JSON.stringify({ type: 'auth', token }));
 
             ws.onmessage = async (e) => {
                 const msg = JSON.parse(e.data);
 
+                if (msg.type === 'auth-ok') {
+                    ws.send(JSON.stringify({ type: 'register-camera', name }));
+                    setIsSharing(true);
+                    return;
+                }
+                if (msg.type === 'auth-error') {
+                    setError('Acceso denegado. El enlace puede haber expirado.');
+                    stream.getTracks().forEach(t => t.stop());
+                    setLocalStream(null);
+                    streamRef.current = null;
+                    return;
+                }
                 if (msg.type === 'viewer-wants-stream') {
                     const pc = new RTCPeerConnection(ICE);
                     peersRef.current[msg.from] = pc;
@@ -131,11 +153,10 @@ export const useCameraShare = () => {
                 }
             };
 
-            setIsSharing(true);
         } catch (err) {
             setError(err.message.includes('Permission') ? 'Permiso de camara denegado' : err.message);
         }
-    }, []);
+    }, [token]);
 
     const stopSharing = useCallback(() => {
         streamRef.current?.getTracks().forEach(t => t.stop());

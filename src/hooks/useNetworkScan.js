@@ -4,7 +4,7 @@ export const useNetworkScan = () => {
     const [isScanning, setIsScanning] = useState(false);
     const [scanProgress, setScanProgress] = useState(0);
 
-    const startScan = useCallback(async () => {
+    const startScan = useCallback(async (token) => {
         setIsScanning(true);
         setScanProgress(0);
 
@@ -16,7 +16,9 @@ export const useNetworkScan = () => {
         }, 120);
 
         try {
-            const response = await fetch('/api/scan');
+            const response = await fetch('/api/scan', {
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
             if (!response.ok) throw new Error('API no disponible');
             const data = await response.json();
             clearInterval(progressInterval);
