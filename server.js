@@ -1,8 +1,35 @@
 import express from 'express';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import os from 'os';
 import http from 'http';
 import { WebSocketServer } from 'ws';
+
+// ─── Cloudflare Quick Tunnel ───────────────────────────────────────────────
+let tunnelUrl = null;
+
+function startCloudflaredTunnel() {
+    // En Windows, cloudflared instalado via npm es un .cmd — shell:true lo resuelve
+    const isWin = process.platform === 'win32';
+    const proc = spawn('cloudflared', ['tunnel', '--url', 'http://localhost:5173'], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: isWin,
+    });
+
+    const parseUrl = (data) => {
+        const text = data.toString();
+        const match = text.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
+        if (match && !tunnelUrl) {
+            tunnelUrl = match[0];
+            console.log(`\n  ✅ Tunnel HTTPS listo: ${tunnelUrl}`);
+            console.log(`  👉 Escanea el QR desde tu iPhone con esta URL HTTPS\n`);
+        }
+    };
+
+    proc.stdout.on('data', parseUrl);
+    proc.stderr.on('data', parseUrl);
+    proc.on('error', () => console.log('  [Tunnel] cloudflared no encontrado, continuando sin HTTPS externo.'));
+    proc.on('close', () => { tunnelUrl = null; });
+}
 
 const app = express();
 const PORT = 3001;
@@ -105,7 +132,7 @@ app.get('/api/scan', async (req, res) => {
 
 app.get('/api/status', (req, res) => {
     const { subnet, myIp } = getLocalNetwork();
-    res.json({ ok: true, myIp, subnet });
+    res.json({ ok: true, myIp, subnet, tunnelUrl });
 });
 
 app.get('/api/stream', (req, res) => {
@@ -189,5 +216,6 @@ httpServer.listen(PORT, () => {
     const { subnet, myIp } = getLocalNetwork();
     console.log(`\n  API + WebSocket corriendo en http://localhost:${PORT}`);
     console.log(`  Red local: ${subnet}.x  |  Este equipo: ${myIp}`);
-    console.log(`  Comparte esta URL en tu telefono: http://${myIp}:5173\n`);
+    console.log(`  Iniciando tunnel HTTPS para iPhone...\n`);
+    startCloudflaredTunnel();
 });

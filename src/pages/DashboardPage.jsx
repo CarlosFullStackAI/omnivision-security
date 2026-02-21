@@ -39,14 +39,35 @@ const DashboardPage = ({ user, onLogout }) => {
     const { cameras: webrtcCameras } = useWebRTCViewer();
     const { isSharing, startSharing, stopSharing, error: webrtcError } = useCameraShare();
     const [localIp, setLocalIp] = useState('');
+    const [tunnelUrl, setTunnelUrl] = useState('');
     const [showShareModal, setShowShareModal] = useState(false);
     const [shareName, setShareName] = useState('Mi Telefono');
 
-    const appProtocol = window.location.protocol; // 'https:' cuando SSL esta activo
+    const appProtocol = window.location.protocol;
+
+    // URL que se muestra en el QR: tunnel HTTPS si ya está listo, sino IP local
+    const cameraUrl = tunnelUrl
+        ? `${tunnelUrl}/#camera`
+        : localIp ? `${appProtocol}//${localIp}:5173/#camera` : '';
 
     useEffect(() => {
-        fetch('/api/status').then(r => r.json()).then(d => setLocalIp(d.myIp || '')).catch(() => {});
-    }, []);
+        const fetchStatus = () => {
+            fetch('/api/status')
+                .then(r => r.json())
+                .then(d => {
+                    if (d.myIp) setLocalIp(d.myIp);
+                    if (d.tunnelUrl) setTunnelUrl(d.tunnelUrl);
+                })
+                .catch(() => {});
+        };
+        fetchStatus();
+        // Polling cada 3s hasta obtener el tunnel URL
+        const interval = setInterval(() => {
+            if (!tunnelUrl) fetchStatus();
+            else clearInterval(interval);
+        }, 3000);
+        return () => clearInterval(interval);
+    }, [tunnelUrl]);
 
     const showToast = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(''), 3000); };
 
@@ -158,32 +179,43 @@ const DashboardPage = ({ user, onLogout }) => {
                                     <Wifi size={18} className="text-emerald-500" />
                                     <h3 className="font-extrabold text-slate-800 dark:text-white text-base">Conectar desde otro dispositivo</h3>
                                 </div>
-                                <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">
-                                    Escanea el QR con el tablet/teléfono (misma red WiFi) — abre directo en <strong className="text-emerald-600 dark:text-emerald-400">Modo Cámara</strong>:
+                                <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">
+                                    Escanea el QR con el tablet/teléfono — abre directo en <strong className="text-emerald-600 dark:text-emerald-400">Modo Cámara</strong>:
                                 </p>
-                                {localIp ? (
+                                {tunnelUrl ? (
+                                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 px-2.5 py-1 rounded-full border border-emerald-300 dark:border-emerald-500/40 mb-2">
+                                        <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                                        HTTPS listo — funciona en iPhone
+                                    </span>
+                                ) : (
+                                    <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-400 font-mono mb-2">
+                                        <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-pulse"></span>
+                                        {localIp ? 'Iniciando tunnel HTTPS...' : 'Iniciando servidor...'}
+                                    </span>
+                                )}
+                                {cameraUrl && (
                                     <div className="flex items-center gap-2 flex-wrap">
-                                        <code className="bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 px-3 py-1.5 rounded-xl text-sm font-mono font-bold border border-slate-200 dark:border-slate-700 select-all">
-                                            {appProtocol}//{localIp}:5173/#camera
+                                        <code className="bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 px-3 py-1.5 rounded-xl text-xs font-mono font-bold border border-slate-200 dark:border-slate-700 select-all break-all">
+                                            {cameraUrl}
                                         </code>
-                                        <button onClick={() => navigator.clipboard?.writeText(`${appProtocol}//${localIp}:5173/#camera`)}
-                                            className="text-xs text-slate-500 hover:text-emerald-500 transition-colors font-medium">
+                                        <button onClick={() => navigator.clipboard?.writeText(cameraUrl)}
+                                            className="text-xs text-slate-500 hover:text-emerald-500 transition-colors font-medium shrink-0">
                                             Copiar
                                         </button>
                                     </div>
-                                ) : (
-                                    <span className="text-xs text-slate-400 font-mono">Iniciando servidor...</span>
                                 )}
                             </div>
                             {/* QR Code */}
-                            {localIp && (
+                            {cameraUrl && (
                                 <div className="shrink-0">
                                     <img
-                                        src={`https://api.qrserver.com/v1/create-qr-code/?data=${appProtocol}//${localIp}:5173/%23camera&size=110x110&bgcolor=ffffff&color=0f172a&margin=4`}
+                                        src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(cameraUrl)}&size=110x110&bgcolor=ffffff&color=0f172a&margin=4`}
                                         alt="QR Code"
                                         className="w-28 h-28 rounded-xl border-2 border-slate-200 dark:border-slate-700 shadow-md"
                                     />
-                                    <p className="text-[10px] text-center text-slate-400 mt-1 font-mono">Modo Cámara</p>
+                                    <p className="text-[10px] text-center text-slate-400 mt-1 font-mono">
+                                        {tunnelUrl ? '🔒 HTTPS' : 'Red Local'}
+                                    </p>
                                 </div>
                             )}
                             {/* Boton compartir camara (desde este dispositivo) */}
